@@ -1,4 +1,6 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_phone_authentication_firebase/pages/home_page.dart';
 import 'package:pinput/pin_put/pin_put.dart';
 
 class OtpPage extends StatefulWidget {
@@ -14,7 +16,16 @@ class _OtpPageState extends State<OtpPage> {
   // pinput field dependencies
   final _pinPutController = TextEditingController();
   final _pinPutFocusNode = FocusNode();
+  String _verificationCode;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
   //
+
+  @override
+  void initState() {
+    super.initState();
+    _verifyPhone();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +37,7 @@ class _OtpPageState extends State<OtpPage> {
     //
 
     return Scaffold(
+      key: _scaffoldKey,
       appBar: AppBar(
         title: Text('OTP Verification'),
         centerTitle: true,
@@ -88,6 +100,7 @@ class _OtpPageState extends State<OtpPage> {
                   // ),
                   // );
                   print(_pinPutController.text);
+                  _onSubmit();
                 },
                 color: Theme.of(context).primaryColor,
               ),
@@ -96,5 +109,66 @@ class _OtpPageState extends State<OtpPage> {
         ),
       ),
     );
+  }
+
+  _verifyPhone() async {
+    await FirebaseAuth.instance.verifyPhoneNumber(
+      phoneNumber: '+88${widget.phoneNumber}',
+      verificationCompleted: (PhoneAuthCredential credential) async {
+        await FirebaseAuth.instance
+            .signInWithCredential(credential)
+            .then((value) async {
+          if (value != null) {
+            print('user logged in');
+            Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => HomePage()),
+                (route) => false);
+          }
+        });
+      },
+      verificationFailed: (FirebaseAuthException e) {
+        print(e.toString());
+      },
+      codeSent: (String verificationID, int resendToken) {
+        setState(() {
+          _verificationCode = verificationID;
+        });
+      },
+      codeAutoRetrievalTimeout: (String verificationID) {
+        setState(() {
+          _verificationCode = verificationID;
+        });
+      },
+      timeout: Duration(seconds: 60),
+    );
+  }
+
+  _onSubmit() async {
+    try {
+      await FirebaseAuth.instance
+          .signInWithCredential(
+        PhoneAuthProvider.credential(
+          verificationId: _verificationCode,
+          smsCode: _pinPutController.text,
+        ),
+      )
+          .then(
+        (value) async {
+          if (value.user != null) {
+            print('pass to home');
+            Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (context) => HomePage()),
+                (route) => false);
+          }
+        },
+      );
+    } catch (e) {
+      FocusScope.of(context).unfocus();
+      _scaffoldKey.currentState.showSnackBar(
+        SnackBar(
+          content: Text('Invalid OTP'),
+        ),
+      );
+    }
   }
 }
